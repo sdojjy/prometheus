@@ -21,16 +21,13 @@ import (
 	"math"
 	"net/http"
 	"strconv"
-	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 
 	"github.com/prometheus/prometheus/pkg/labels"
-	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/prometheus/prometheus/storage"
 )
 
@@ -39,7 +36,7 @@ import (
 type Manager struct {
 	logger log.Logger
 	append storage.Appendable
-	cache  *scrapeCache
+	//cache  *scrapeCache
 }
 
 // NewManager is the Manager constructor
@@ -50,267 +47,265 @@ func NewManager(logger log.Logger, app storage.Appendable) *Manager {
 	m := &Manager{
 		append: app,
 		logger: logger,
-		cache:  newScrapeCache(),
+		//cache:  newScrapeCache(),
 	}
 	return m
 }
 
-func newScrapeCache() *scrapeCache {
-	return &scrapeCache{
-		series:        map[string]*cacheEntry{},
-		droppedSeries: map[string]*uint64{},
-		seriesCur:     map[uint64]labels.Labels{},
-		seriesPrev:    map[uint64]labels.Labels{},
-		metadata:      map[string]*metaEntry{},
-	}
-}
+//func newScrapeCache() *scrapeCache {
+//	return &scrapeCache{
+//		series:        map[string]*cacheEntry{},
+//		droppedSeries: map[string]*uint64{},
+//		seriesCur:     map[uint64]labels.Labels{},
+//		seriesPrev:    map[uint64]labels.Labels{},
+//		metadata:      map[string]*metaEntry{},
+//	}
+//}
 
 // scrapeCache tracks mappings of exposed metric strings to label sets and
 // storage references. Additionally, it tracks staleness of series between
 // scrapes.
-type scrapeCache struct {
-	iter uint64 // Current scrape iteration.
+//type scrapeCache struct {
+//	// How many series and metadata entries there were at the last success.
+//	successfulCount int
+//
+//	// Parsed string to an entry with information about the actual label set
+//	// and its storage reference.
+//	series map[string]*cacheEntry
+//
+//	// Cache of dropped metric strings and their iteration. The iteration must
+//	// be a pointer so we can update it without setting a new entry with an unsafe
+//	// string in addDropped().
+//	droppedSeries map[string]*uint64
+//
+//	// seriesCur and seriesPrev store the labels of series that were seen
+//	// in the current and previous scrape.
+//	// We hold two maps and swap them out to save allocations.
+//	seriesCur  map[uint64]labels.Labels
+//	seriesPrev map[uint64]labels.Labels
+//
+//	metaMtx  sync.Mutex
+//	metadata map[string]*metaEntry
+//}
 
-	// How many series and metadata entries there were at the last success.
-	successfulCount int
+//func (c *scrapeCache) iterDone(flushCache bool) {
+//	c.metaMtx.Lock()
+//	count := len(c.series) + len(c.droppedSeries) + len(c.metadata)
+//	c.metaMtx.Unlock()
+//
+//	if flushCache {
+//		c.successfulCount = count
+//	} else if count > c.successfulCount*2+1000 {
+//		// If a target had varying labels in scrapes that ultimately failed,
+//		// the caches would grow indefinitely. Force a flush when this happens.
+//		// We use the heuristic that this is a doubling of the cache size
+//		// since the last scrape, and allow an additional 1000 in case
+//		// initial scrapes all fail.
+//		flushCache = true
+//	}
+//
+//	if flushCache {
+//		// All caches may grow over time through series churn
+//		// or multiple string representations of the same metric. Clean up entries
+//		// that haven't appeared in the last scrape.
+//		for s, e := range c.series {
+//			if c.iter != e.lastIter {
+//				delete(c.series, s)
+//			}
+//		}
+//		for s, iter := range c.droppedSeries {
+//			if c.iter != *iter {
+//				delete(c.droppedSeries, s)
+//			}
+//		}
+//		c.metaMtx.Lock()
+//		for m, e := range c.metadata {
+//			// Keep metadata around for 10 scrapes after its metric disappeared.
+//			if c.iter-e.lastIter > 10 {
+//				delete(c.metadata, m)
+//			}
+//		}
+//		c.metaMtx.Unlock()
+//
+//		c.iter++
+//	}
+//
+//	// Swap current and previous series.
+//	c.seriesPrev, c.seriesCur = c.seriesCur, c.seriesPrev
+//
+//	// We have to delete every single key in the map.
+//	for k := range c.seriesCur {
+//		delete(c.seriesCur, k)
+//	}
+//}
 
-	// Parsed string to an entry with information about the actual label set
-	// and its storage reference.
-	series map[string]*cacheEntry
+//func (c *scrapeCache) get(met string) (*cacheEntry, bool) {
+//	e, ok := c.series[met]
+//	if !ok {
+//		return nil, false
+//	}
+//	e.lastIter = c.iter
+//	return e, true
+//}
 
-	// Cache of dropped metric strings and their iteration. The iteration must
-	// be a pointer so we can update it without setting a new entry with an unsafe
-	// string in addDropped().
-	droppedSeries map[string]*uint64
+//func (c *scrapeCache) addRef(met string, ref uint64, lset labels.Labels, hash uint64) {
+//	if ref == 0 {
+//		return
+//	}
+//	c.series[met] = &cacheEntry{ref: ref, lastIter: c.iter, lset: lset, hash: hash}
+//}
 
-	// seriesCur and seriesPrev store the labels of series that were seen
-	// in the current and previous scrape.
-	// We hold two maps and swap them out to save allocations.
-	seriesCur  map[uint64]labels.Labels
-	seriesPrev map[uint64]labels.Labels
+//func (c *scrapeCache) addDropped(met string) {
+//	iter := c.iter
+//	c.droppedSeries[met] = &iter
+//}
 
-	metaMtx  sync.Mutex
-	metadata map[string]*metaEntry
-}
+//func (c *scrapeCache) getDropped(met string) bool {
+//	iterp, ok := c.droppedSeries[met]
+//	if ok {
+//		*iterp = c.iter
+//	}
+//	return ok
+//}
+//func (c *scrapeCache) forEachStale(f func(labels.Labels) bool) {
+//	for h, lset := range c.seriesPrev {
+//		if _, ok := c.seriesCur[h]; !ok {
+//			if !f(lset) {
+//				break
+//			}
+//		}
+//	}
+//}
 
-func (c *scrapeCache) iterDone(flushCache bool) {
-	c.metaMtx.Lock()
-	count := len(c.series) + len(c.droppedSeries) + len(c.metadata)
-	c.metaMtx.Unlock()
-
-	if flushCache {
-		c.successfulCount = count
-	} else if count > c.successfulCount*2+1000 {
-		// If a target had varying labels in scrapes that ultimately failed,
-		// the caches would grow indefinitely. Force a flush when this happens.
-		// We use the heuristic that this is a doubling of the cache size
-		// since the last scrape, and allow an additional 1000 in case
-		// initial scrapes all fail.
-		flushCache = true
-	}
-
-	if flushCache {
-		// All caches may grow over time through series churn
-		// or multiple string representations of the same metric. Clean up entries
-		// that haven't appeared in the last scrape.
-		for s, e := range c.series {
-			if c.iter != e.lastIter {
-				delete(c.series, s)
-			}
-		}
-		for s, iter := range c.droppedSeries {
-			if c.iter != *iter {
-				delete(c.droppedSeries, s)
-			}
-		}
-		c.metaMtx.Lock()
-		for m, e := range c.metadata {
-			// Keep metadata around for 10 scrapes after its metric disappeared.
-			if c.iter-e.lastIter > 10 {
-				delete(c.metadata, m)
-			}
-		}
-		c.metaMtx.Unlock()
-
-		c.iter++
-	}
-
-	// Swap current and previous series.
-	c.seriesPrev, c.seriesCur = c.seriesCur, c.seriesPrev
-
-	// We have to delete every single key in the map.
-	for k := range c.seriesCur {
-		delete(c.seriesCur, k)
-	}
-}
-
-func (c *scrapeCache) get(met string) (*cacheEntry, bool) {
-	e, ok := c.series[met]
-	if !ok {
-		return nil, false
-	}
-	e.lastIter = c.iter
-	return e, true
-}
-
-func (c *scrapeCache) addRef(met string, ref uint64, lset labels.Labels, hash uint64) {
-	if ref == 0 {
-		return
-	}
-	c.series[met] = &cacheEntry{ref: ref, lastIter: c.iter, lset: lset, hash: hash}
-}
-
-func (c *scrapeCache) addDropped(met string) {
-	iter := c.iter
-	c.droppedSeries[met] = &iter
-}
-
-func (c *scrapeCache) getDropped(met string) bool {
-	iterp, ok := c.droppedSeries[met]
-	if ok {
-		*iterp = c.iter
-	}
-	return ok
-}
-func (c *scrapeCache) forEachStale(f func(labels.Labels) bool) {
-	for h, lset := range c.seriesPrev {
-		if _, ok := c.seriesCur[h]; !ok {
-			if !f(lset) {
-				break
-			}
-		}
-	}
-}
-
-func (c *scrapeCache) setType(metric []byte, t textparse.MetricType) {
-	c.metaMtx.Lock()
-
-	e, ok := c.metadata[yoloString(metric)]
-	if !ok {
-		e = &metaEntry{typ: textparse.MetricTypeUnknown}
-		c.metadata[string(metric)] = e
-	}
-	e.typ = t
-	e.lastIter = c.iter
-
-	c.metaMtx.Unlock()
-}
-
-func (c *scrapeCache) setHelp(metric, help []byte) {
-	c.metaMtx.Lock()
-
-	e, ok := c.metadata[yoloString(metric)]
-	if !ok {
-		e = &metaEntry{typ: textparse.MetricTypeUnknown}
-		c.metadata[string(metric)] = e
-	}
-	if e.help != yoloString(help) {
-		e.help = string(help)
-	}
-	e.lastIter = c.iter
-
-	c.metaMtx.Unlock()
-}
-
-func (c *scrapeCache) setUnit(metric, unit []byte) {
-	c.metaMtx.Lock()
-
-	e, ok := c.metadata[yoloString(metric)]
-	if !ok {
-		e = &metaEntry{typ: textparse.MetricTypeUnknown}
-		c.metadata[string(metric)] = e
-	}
-	if e.unit != yoloString(unit) {
-		e.unit = string(unit)
-	}
-	e.lastIter = c.iter
-
-	c.metaMtx.Unlock()
-}
-
-func (c *scrapeCache) GetMetadata(metric string) (MetricMetadata, bool) {
-	c.metaMtx.Lock()
-	defer c.metaMtx.Unlock()
-
-	m, ok := c.metadata[metric]
-	if !ok {
-		return MetricMetadata{}, false
-	}
-	return MetricMetadata{
-		Metric: metric,
-		Type:   m.typ,
-		Help:   m.help,
-		Unit:   m.unit,
-	}, true
-}
-
-func (c *scrapeCache) ListMetadata() []MetricMetadata {
-	c.metaMtx.Lock()
-	defer c.metaMtx.Unlock()
-
-	res := make([]MetricMetadata, 0, len(c.metadata))
-
-	for m, e := range c.metadata {
-		res = append(res, MetricMetadata{
-			Metric: m,
-			Type:   e.typ,
-			Help:   e.help,
-			Unit:   e.unit,
-		})
-	}
-	return res
-}
-
-// MetadataSize returns the size of the metadata cache.
-func (c *scrapeCache) SizeMetadata() (s int) {
-	c.metaMtx.Lock()
-	defer c.metaMtx.Unlock()
-	for _, e := range c.metadata {
-		s += e.size()
-	}
-
-	return s
-}
-
-// MetadataLen returns the number of metadata entries in the cache.
-func (c *scrapeCache) LengthMetadata() int {
-	c.metaMtx.Lock()
-	defer c.metaMtx.Unlock()
-
-	return len(c.metadata)
-}
-
-// metaEntry holds meta information about a metric.
-type metaEntry struct {
-	lastIter uint64 // Last scrape iteration the entry was observed at.
-	typ      textparse.MetricType
-	help     string
-	unit     string
-}
-
-func (m *metaEntry) size() int {
-	// The attribute lastIter although part of the struct it is not metadata.
-	return len(m.help) + len(m.unit) + len(m.typ)
-}
-
-type cacheEntry struct {
-	ref      uint64
-	lastIter uint64
-	hash     uint64
-	lset     labels.Labels
-}
-
-func yoloString(b []byte) string {
-	return *((*string)(unsafe.Pointer(&b)))
-}
-
-// MetricMetadata is a piece of metadata for a metric.
-type MetricMetadata struct {
-	Metric string
-	Type   textparse.MetricType
-	Help   string
-	Unit   string
-}
+//func (c *scrapeCache) setType(metric []byte, t textparse.MetricType) {
+//	c.metaMtx.Lock()
+//
+//	e, ok := c.metadata[yoloString(metric)]
+//	if !ok {
+//		e = &metaEntry{typ: textparse.MetricTypeUnknown}
+//		c.metadata[string(metric)] = e
+//	}
+//	e.typ = t
+//	e.lastIter = c.iter
+//
+//	c.metaMtx.Unlock()
+//}
+//
+//func (c *scrapeCache) setHelp(metric, help []byte) {
+//	c.metaMtx.Lock()
+//
+//	e, ok := c.metadata[yoloString(metric)]
+//	if !ok {
+//		e = &metaEntry{typ: textparse.MetricTypeUnknown}
+//		c.metadata[string(metric)] = e
+//	}
+//	if e.help != yoloString(help) {
+//		e.help = string(help)
+//	}
+//	e.lastIter = c.iter
+//
+//	c.metaMtx.Unlock()
+//}
+//
+//func (c *scrapeCache) setUnit(metric, unit []byte) {
+//	c.metaMtx.Lock()
+//
+//	e, ok := c.metadata[yoloString(metric)]
+//	if !ok {
+//		e = &metaEntry{typ: textparse.MetricTypeUnknown}
+//		c.metadata[string(metric)] = e
+//	}
+//	if e.unit != yoloString(unit) {
+//		e.unit = string(unit)
+//	}
+//	e.lastIter = c.iter
+//
+//	c.metaMtx.Unlock()
+//}
+//
+//func (c *scrapeCache) GetMetadata(metric string) (MetricMetadata, bool) {
+//	c.metaMtx.Lock()
+//	defer c.metaMtx.Unlock()
+//
+//	m, ok := c.metadata[metric]
+//	if !ok {
+//		return MetricMetadata{}, false
+//	}
+//	return MetricMetadata{
+//		Metric: metric,
+//		Type:   m.typ,
+//		Help:   m.help,
+//		Unit:   m.unit,
+//	}, true
+//}
+//
+//func (c *scrapeCache) ListMetadata() []MetricMetadata {
+//	c.metaMtx.Lock()
+//	defer c.metaMtx.Unlock()
+//
+//	res := make([]MetricMetadata, 0, len(c.metadata))
+//
+//	for m, e := range c.metadata {
+//		res = append(res, MetricMetadata{
+//			Metric: m,
+//			Type:   e.typ,
+//			Help:   e.help,
+//			Unit:   e.unit,
+//		})
+//	}
+//	return res
+//}
+//
+//// MetadataSize returns the size of the metadata cache.
+//func (c *scrapeCache) SizeMetadata() (s int) {
+//	c.metaMtx.Lock()
+//	defer c.metaMtx.Unlock()
+//	for _, e := range c.metadata {
+//		s += e.size()
+//	}
+//
+//	return s
+//}
+//
+//// MetadataLen returns the number of metadata entries in the cache.
+//func (c *scrapeCache) LengthMetadata() int {
+//	c.metaMtx.Lock()
+//	defer c.metaMtx.Unlock()
+//
+//	return len(c.metadata)
+//}
+//
+//// metaEntry holds meta information about a metric.
+//type metaEntry struct {
+//	lastIter uint64 // Last scrape iteration the entry was observed at.
+//	typ      textparse.MetricType
+//	help     string
+//	unit     string
+//}
+//
+//func (m *metaEntry) size() int {
+//	// The attribute lastIter although part of the struct it is not metadata.
+//	return len(m.help) + len(m.unit) + len(m.typ)
+//}
+//
+//type cacheEntry struct {
+//	ref      uint64
+//	lastIter uint64
+//	hash     uint64
+//	lset     labels.Labels
+//}
+//
+//func yoloString(b []byte) string {
+//	return *((*string)(unsafe.Pointer(&b)))
+//}
+//
+//// MetricMetadata is a piece of metadata for a metric.
+//type MetricMetadata struct {
+//	Metric string
+//	Type   textparse.MetricType
+//	Help   string
+//	Unit   string
+//}
 
 type Payload struct {
 	TimeSeries []TimeSeries `json:"series"`
@@ -362,6 +357,9 @@ func (m *Manager) Append(r *http.Request) error {
 
 	b, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
+	if err != nil {
+		return err
+	}
 
 	pb := &Payload{}
 	err = json.Unmarshal(b, pb)

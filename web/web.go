@@ -175,7 +175,6 @@ type Handler struct {
 	metrics  *metrics
 
 	scrapeManager *scrape.Manager
-	pushManager   *push.Manager
 	ruleManager   *rules.Manager
 	queryEngine   *promql.Engine
 	lookbackDelta time.Duration
