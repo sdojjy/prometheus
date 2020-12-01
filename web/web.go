@@ -50,6 +50,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/server"
+	"github.com/prometheus/prometheus/push"
 	"go.uber.org/atomic"
 	"golang.org/x/net/netutil"
 
@@ -174,6 +175,7 @@ type Handler struct {
 	metrics  *metrics
 
 	scrapeManager *scrape.Manager
+	pushManager   *push.Manager
 	ruleManager   *rules.Manager
 	queryEngine   *promql.Engine
 	lookbackDelta time.Duration
@@ -221,6 +223,7 @@ type Options struct {
 	QueryEngine           *promql.Engine
 	LookbackDelta         time.Duration
 	ScrapeManager         *scrape.Manager
+	PushManager           *push.Manager
 	RuleManager           *rules.Manager
 	Notifier              *notifier.Manager
 	Version               *PrometheusVersion
@@ -309,6 +312,7 @@ func New(logger log.Logger, o *Options) *Handler {
 		},
 		h.testReady,
 		h.options.LocalStorage,
+		h.options.PushManager,
 		h.options.TSDBDir,
 		h.options.EnableAdminAPI,
 		logger,
