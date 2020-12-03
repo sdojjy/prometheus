@@ -44,6 +44,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/promlog"
 	"github.com/prometheus/common/version"
+	"github.com/prometheus/prometheus/push"
 	jcfg "github.com/uber/jaeger-client-go/config"
 	jprom "github.com/uber/jaeger-lib/metrics/prometheus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
@@ -366,7 +367,8 @@ func main() {
 
 		scrapeManager = scrape.NewManager(log.With(logger, "component", "scrape manager"), fanoutStorage)
 
-		opts = promql.EngineOpts{
+		pushManager = push.NewManager(log.With(logger, "component", "push manager"), fanoutStorage)
+		opts        = promql.EngineOpts{
 			Logger:             log.With(logger, "component", "query engine"),
 			Reg:                prometheus.DefaultRegisterer,
 			MaxSamples:         cfg.queryMaxSamples,
@@ -400,6 +402,7 @@ func main() {
 	cfg.web.Storage = fanoutStorage
 	cfg.web.QueryEngine = queryEngine
 	cfg.web.ScrapeManager = scrapeManager
+	cfg.web.PushManager = pushManager
 	cfg.web.RuleManager = ruleManager
 	cfg.web.Notifier = notifierManager
 	cfg.web.LookbackDelta = time.Duration(cfg.lookbackDelta)

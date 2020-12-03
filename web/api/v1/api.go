@@ -45,6 +45,7 @@ import (
 	"github.com/prometheus/prometheus/prompb"
 	"github.com/prometheus/prometheus/promql"
 	"github.com/prometheus/prometheus/promql/parser"
+	"github.com/prometheus/prometheus/push"
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/prometheus/storage"
@@ -185,6 +186,8 @@ type API struct {
 	ready                 func(http.HandlerFunc) http.HandlerFunc
 	globalURLOptions      GlobalURLOptions
 
+	pushManager *push.Manager
+
 	db                        TSDBAdminStats
 	dbDir                     string
 	enableAdmin               bool
@@ -213,6 +216,7 @@ func NewAPI(
 	globalURLOptions GlobalURLOptions,
 	readyFunc func(http.HandlerFunc) http.HandlerFunc,
 	db TSDBAdminStats,
+	pushManager *push.Manager,
 	dbDir string,
 	enableAdmin bool,
 	logger log.Logger,
@@ -229,6 +233,8 @@ func NewAPI(
 		Queryable:             q,
 		targetRetriever:       tr,
 		alertmanagerRetriever: ar,
+
+		pushManager: pushManager,
 
 		now:                       time.Now,
 		config:                    configFunc,
@@ -287,6 +293,9 @@ func (api *API) Register(r *route.Router) {
 	r.Post("/query", wrap(api.query))
 	r.Get("/query_range", wrap(api.queryRange))
 	r.Post("/query_range", wrap(api.queryRange))
+
+	//push metrics to promethus
+	r.Post("/push", wrap(api.push))
 
 	r.Get("/labels", wrap(api.labelNames))
 	r.Post("/labels", wrap(api.labelNames))
@@ -1619,4 +1628,11 @@ func marshalPointJSON(ptr unsafe.Pointer, stream *jsoniter.Stream) {
 
 func marshalPointJSONIsEmpty(ptr unsafe.Pointer) bool {
 	return false
+}
+
+func (api *API) push(r *http.Request) (result apiFuncResult) {
+	if err := api.pushManager.Append(r); err != nil {
+		result.err = &apiError{err: err, typ: errorInternal}
+	}
+	return
 }

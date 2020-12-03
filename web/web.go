@@ -51,6 +51,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/common/route"
 	"github.com/prometheus/common/server"
+	"github.com/prometheus/prometheus/push"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/prometheus/prometheus/tsdb/index"
 	"github.com/soheilhy/cmux"
@@ -226,6 +227,7 @@ type Options struct {
 	QueryEngine           *promql.Engine
 	LookbackDelta         time.Duration
 	ScrapeManager         *scrape.Manager
+	PushManager           *push.Manager
 	RuleManager           *rules.Manager
 	Notifier              *notifier.Manager
 	Version               *PrometheusVersion
@@ -315,6 +317,7 @@ func New(logger log.Logger, o *Options) *Handler {
 		},
 		h.testReady,
 		h.options.LocalStorage,
+		h.options.PushManager,
 		h.options.TSDBDir,
 		h.options.EnableAdminAPI,
 		logger,
