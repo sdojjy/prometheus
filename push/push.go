@@ -14,14 +14,15 @@
 package push
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/go-kit/kit/log/level"
 	"io/ioutil"
 	"math"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
+	"unsafe"
 
 	"github.com/go-kit/kit/log"
 	"github.com/pkg/errors"
@@ -288,16 +289,17 @@ func NewManager(logger log.Logger, app storage.Appendable) *Manager {
 //	return len(m.help) + len(m.unit) + len(m.typ)
 //}
 //
-//type cacheEntry struct {
-//	ref      uint64
-//	lastIter uint64
-//	hash     uint64
-//	lset     labels.Labels
-//}
-//
-//func yoloString(b []byte) string {
-//	return *((*string)(unsafe.Pointer(&b)))
-//}
+type cacheEntry struct {
+	ref      uint64
+	lastIter uint64
+	hash     uint64
+	lset     labels.Labels
+}
+
+func yoloString(b []byte) string {
+	return *((*string)(unsafe.Pointer(&b)))
+}
+
 //
 //// MetricMetadata is a piece of metadata for a metric.
 //type MetricMetadata struct {
@@ -341,21 +343,14 @@ func parseDuration(s string) (time.Duration, error) {
 	return 0, errors.Errorf("cannot parse %q to a valid duration", s)
 }
 
-func (m *Manager) Append(r *http.Request) error {
+func (m *Manager) Append(r *http.Request) (err error) {
+	var (
+		b  []byte
+		id uint64
+	)
 	ctx := r.Context()
-	if to := r.FormValue("timeout"); to != "" {
-		var cancel context.CancelFunc
-		timeout, err := parseDuration(to)
-		if err != nil {
-			err = errors.Wrapf(err, "invalid parameter 'timeout'")
-			return err
-		}
 
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-
-	b, err := ioutil.ReadAll(r.Body)
+	b, err = ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
 		return err
@@ -368,22 +363,66 @@ func (m *Manager) Append(r *http.Request) error {
 	}
 
 	appender := m.append.Appender(ctx)
-
+	defer func() {
+		if err != nil {
+			appender.Rollback()
+			return
+		}
+		err = appender.Commit()
+		if err != nil {
+			level.Error(m.logger).Log("msg", "Scrape commit failed", "err", err)
+		}
+	}()
 	for _, ts := range pb.TimeSeries {
 		var ls labels.Labels
 		for _, label := range ts.Labels {
 			ls = append(ls, labels.Label{Name: label.Name, Value: label.Value})
 		}
-
+		sort.Sort(ls)
 		for _, sample := range ts.Samples {
 			println(sample.Timestamp, sample.Value)
-			id, err := appender.Add(ls, sample.Timestamp, sample.Value)
-			if err == nil {
-				fmt.Printf("new sample is added,id:%d, ts:%d\n value: %f", id, sample.Timestamp, sample.Value)
-			} else {
+			id, err = appender.Add(ls, sample.Timestamp, sample.Value)
+			if err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// Adds samples to the appender, checking the error, and then returns the # of samples added,
+// whether the caller should continue to process more samples, and any sample limit errors.
+
+func (sl *scrapeLoop) checkAddError(ce *cacheEntry, met []byte, tp *int64, err error, sampleLimitErr *error, appErrs *appendErrors) (bool, error) {
+	switch errors.Cause(err) {
+	case nil:
+		if tp == nil && ce != nil {
+			sl.cache.trackStaleness(ce.hash, ce.lset)
+		}
+		return true, nil
+	case storage.ErrNotFound:
+		return false, storage.ErrNotFound
+	case storage.ErrOutOfOrderSample:
+		appErrs.numOutOfOrder++
+		level.Debug(sl.l).Log("msg", "Out of order sample", "series", string(met))
+		targetScrapeSampleOutOfOrder.Inc()
+		return false, nil
+	case storage.ErrDuplicateSampleForTimestamp:
+		appErrs.numDuplicates++
+		level.Debug(sl.l).Log("msg", "Duplicate sample for timestamp", "series", string(met))
+		targetScrapeSampleDuplicate.Inc()
+		return false, nil
+	case storage.ErrOutOfBounds:
+		appErrs.numOutOfBounds++
+		level.Debug(sl.l).Log("msg", "Out of bounds metric", "series", string(met))
+		targetScrapeSampleOutOfBounds.Inc()
+		return false, nil
+	case errSampleLimit:
+		// Keep on parsing output if we hit the limit, so we report the correct
+		// total number of samples scraped.
+		*sampleLimitErr = err
+		return false, nil
+	default:
+		return false, err
+	}
 }
