@@ -1121,6 +1121,7 @@ func (sl *scrapeLoop) append(app storage.Appender, b []byte, contentType string,
 
 	defer func() {
 		if err != nil {
+			level.Debug(sl.l).Log("msg", "Unexpected error", "err", err, "content", string(b))
 			return
 		}
 		// Only perform cache cleaning if the scrape was not empty.
@@ -1232,13 +1233,13 @@ loop:
 		targetScrapeSampleLimit.Inc()
 	}
 	if appErrs.numOutOfOrder > 0 {
-		level.Warn(sl.l).Log("msg", "Error on ingesting out-of-order samples", "num_dropped", appErrs.numOutOfOrder)
+		level.Warn(sl.l).Log("msg", "Error on ingesting out-of-order samples", "num_dropped", appErrs.numOutOfOrder, "content", string(b))
 	}
 	if appErrs.numDuplicates > 0 {
-		level.Warn(sl.l).Log("msg", "Error on ingesting samples with different value but same timestamp", "num_dropped", appErrs.numDuplicates)
+		level.Warn(sl.l).Log("msg", "Error on ingesting samples with different value but same timestamp", "num_dropped", appErrs.numDuplicates, "content", string(b))
 	}
 	if appErrs.numOutOfBounds > 0 {
-		level.Warn(sl.l).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "num_dropped", appErrs.numOutOfBounds)
+		level.Warn(sl.l).Log("msg", "Error on ingesting samples that are too old or are too far into the future", "num_dropped", appErrs.numOutOfBounds, "content", string(b))
 	}
 	if err == nil {
 		sl.cache.forEachStale(func(lset labels.Labels) bool {
@@ -1274,17 +1275,17 @@ func (sl *scrapeLoop) checkAddError(ce *cacheEntry, met []byte, tp *int64, err e
 		return false, storage.ErrNotFound
 	case storage.ErrOutOfOrderSample:
 		appErrs.numOutOfOrder++
-		level.Debug(sl.l).Log("msg", "Out of order sample", "series", string(met))
+		level.Debug(sl.l).Log("msg", "Out of order sample", "series", string(met), "time", tp)
 		targetScrapeSampleOutOfOrder.Inc()
 		return false, nil
 	case storage.ErrDuplicateSampleForTimestamp:
 		appErrs.numDuplicates++
-		level.Debug(sl.l).Log("msg", "Duplicate sample for timestamp", "series", string(met))
+		level.Debug(sl.l).Log("msg", "Duplicate sample for timestamp", "series", string(met), "time", tp)
 		targetScrapeSampleDuplicate.Inc()
 		return false, nil
 	case storage.ErrOutOfBounds:
 		appErrs.numOutOfBounds++
-		level.Debug(sl.l).Log("msg", "Out of bounds metric", "series", string(met))
+		level.Debug(sl.l).Log("msg", "Out of bounds metric", "series", string(met), "time", tp)
 		targetScrapeSampleOutOfBounds.Inc()
 		return false, nil
 	case errSampleLimit:
