@@ -24,6 +24,7 @@ import (
 	"math"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -1164,6 +1165,11 @@ loop:
 		}
 		if tp != nil {
 			t = *tp
+		}
+
+		labelStr := string(met)
+		if strings.Contains(labelStr, "zoomphant.resource.exist") {
+			level.Debug(sl.l).Log("msg", "Unexpected error", "label", labelStr, "tp", tp, "value", v)
 		}
 
 		if sl.cache.getDropped(yoloString(met)) {
