@@ -15,7 +15,10 @@ package v1
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/prometheus/prometheus/trace"
+	"io/ioutil"
 	"math"
 	"math/rand"
 	"net"
@@ -311,6 +314,9 @@ func (api *API) Register(r *route.Router) {
 
 	r.Get("/alerts", wrap(api.alerts))
 	r.Get("/rules", wrap(api.rules))
+
+
+	r.Post("/trace", wrap(api.trace))
 
 	// Admin APIs
 	r.Post("/admin/tsdb/delete_series", wrap(api.deleteSeries))
@@ -1459,6 +1465,27 @@ func (api *API) cleanTombstones(r *http.Request) apiFuncResult {
 		return apiFuncResult{nil, &apiError{errorInternal, err}, nil, nil}
 	}
 
+	return apiFuncResult{nil, nil, nil, nil}
+}
+
+func (api *API) trace(r *http.Request) apiFuncResult {
+	var err error
+	var buf []byte
+	buf, err = ioutil.ReadAll(r.Body)
+	if err != nil {
+		level.Error(api.logger).Log("msg", "error read json", "err", err)
+		return apiFuncResult{nil, &apiError{err: err, typ: errorBadData}, nil, nil}
+	}
+	defer r.Body.Close()
+	var t = struct {
+		Labels []labels.Label
+	}{}
+	err = json.Unmarshal(buf, &t)
+	if err != nil {
+		level.Error(api.logger).Log("msg", "error un marshaling json", "err", err)
+		return apiFuncResult{nil, &apiError{err: err, typ: errorBadData}, nil, nil}
+	}
+	trace.AddTrace(t.Labels)
 	return apiFuncResult{nil, nil, nil, nil}
 }
 

@@ -19,12 +19,12 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/prometheus/prometheus/trace"
 	"io"
 	"io/ioutil"
 	"math"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -1167,9 +1167,12 @@ loop:
 			t = *tp
 		}
 
-		labelStr := string(met)
-		if strings.Contains(labelStr, "zoomphant.resource.exist") {
-			level.Debug(sl.l).Log("msg", "Unexpected error", "label", labelStr, "tp", tp, "value", v)
+		if trace.IsTranceOn() {
+			var traceLabel labels.Labels
+			p.Metric(&traceLabel)
+			if trace.ShouldTrace(&traceLabel) {
+				level.Debug(sl.l).Log("msg", "Unexpected error", "label", traceLabel, "tp", tp, "value", v)
+			}
 		}
 
 		if sl.cache.getDropped(yoloString(met)) {
