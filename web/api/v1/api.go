@@ -315,7 +315,6 @@ func (api *API) Register(r *route.Router) {
 	r.Get("/alerts", wrap(api.alerts))
 	r.Get("/rules", wrap(api.rules))
 
-
 	r.Post("/trace", wrap(api.trace))
 
 	// Admin APIs
@@ -1485,6 +1484,7 @@ func (api *API) trace(r *http.Request) apiFuncResult {
 		level.Error(api.logger).Log("msg", "error un marshaling json", "err", err)
 		return apiFuncResult{nil, &apiError{err: err, typ: errorBadData}, nil, nil}
 	}
+	level.Info(api.logger).Log("msg", "add trace labels", "label", t.Labels)
 	trace.AddTrace(t.Labels)
 	return apiFuncResult{nil, nil, nil, nil}
 }
