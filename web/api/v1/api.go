@@ -1484,7 +1484,7 @@ func (api *API) trace(r *http.Request) apiFuncResult {
 		level.Error(api.logger).Log("msg", "error un marshaling json", "err", err)
 		return apiFuncResult{nil, &apiError{err: err, typ: errorBadData}, nil, nil}
 	}
-	level.Info(api.logger).Log("msg", "add trace labels", "label", t.Labels)
+	level.Info(api.logger).Log("msg", "add trace labels", "label", labels.New(t.Labels...))
 	trace.AddTrace(t.Labels)
 	return apiFuncResult{nil, nil, nil, nil}
 }

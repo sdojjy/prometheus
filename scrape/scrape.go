@@ -1135,6 +1135,8 @@ loop:
 		var (
 			et          textparse.Entry
 			sampleAdded bool
+			shouldTrace = false
+			traceLabel  labels.Labels
 		)
 		if et, err = p.Next(); err != nil {
 			if err == io.EOF {
@@ -1168,10 +1170,10 @@ loop:
 		}
 
 		if trace.IsTranceOn() {
-			var traceLabel labels.Labels
 			p.Metric(&traceLabel)
 			if trace.ShouldTrace(&traceLabel) {
-				level.Debug(sl.l).Log("msg", "Unexpected error", "label", traceLabel, "tp", tp, "value", v)
+				shouldTrace = true
+				level.Info(sl.l).Log("msg", "reported series", "label", traceLabel, "tp", tp, "value", v)
 			}
 		}
 
@@ -1232,7 +1234,9 @@ loop:
 		// Increment added even if there's an error so we correctly report the
 		// number of samples remaining after relabeling.
 		added++
-
+		if shouldTrace {
+			level.Info(sl.l).Log("msg", "added series", "label", traceLabel, "tp", tp, "value", v)
+		}
 	}
 	if sampleLimitErr != nil {
 		if err == nil {
