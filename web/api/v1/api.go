@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/prometheus/push"
 	"github.com/prometheus/prometheus/trace"
 	"io/ioutil"
 	"math"
@@ -188,6 +189,8 @@ type API struct {
 	ready                 func(http.HandlerFunc) http.HandlerFunc
 	globalURLOptions      GlobalURLOptions
 
+	PushManager *push.Manager
+
 	db                        TSDBAdminStats
 	dbDir                     string
 	enableAdmin               bool
@@ -217,6 +220,7 @@ func NewAPI(
 	readyFunc func(http.HandlerFunc) http.HandlerFunc,
 	db TSDBAdminStats,
 	dbDir string,
+	pushManager *push.Manager,
 	enableAdmin bool,
 	logger log.Logger,
 	rr func(context.Context) RulesRetriever,
@@ -240,6 +244,7 @@ func NewAPI(
 		globalURLOptions:          globalURLOptions,
 		db:                        db,
 		dbDir:                     dbDir,
+		PushManager:               pushManager,
 		enableAdmin:               enableAdmin,
 		rulesRetriever:            rr,
 		remoteReadSampleLimit:     remoteReadSampleLimit,
@@ -316,6 +321,7 @@ func (api *API) Register(r *route.Router) {
 	r.Get("/rules", wrap(api.rules))
 
 	r.Post("/trace", wrap(api.trace))
+	r.Post("/push", wrap(api.push))
 
 	// Admin APIs
 	r.Post("/admin/tsdb/delete_series", wrap(api.deleteSeries))
@@ -1487,6 +1493,13 @@ func (api *API) trace(r *http.Request) apiFuncResult {
 	level.Info(api.logger).Log("msg", "add trace labels", "label", labels.New(t.Labels...))
 	trace.AddTrace(t.Labels)
 	return apiFuncResult{nil, nil, nil, nil}
+}
+
+func (api *API) push(r *http.Request) (result apiFuncResult) {
+	if err := api.PushManager.Append(r); err != nil {
+		result.err = &apiError{err: err, typ: errorInternal}
+	}
+	return
 }
 
 func (api *API) respond(w http.ResponseWriter, data interface{}, warnings storage.Warnings) {

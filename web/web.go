@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/prometheus/prometheus/push"
 	"io"
 	"io/ioutil"
 	stdlog "log"
@@ -226,6 +227,7 @@ type Options struct {
 	QueryEngine           *promql.Engine
 	LookbackDelta         time.Duration
 	ScrapeManager         *scrape.Manager
+	PushManager           *push.Manager
 	RuleManager           *rules.Manager
 	Notifier              *notifier.Manager
 	Version               *PrometheusVersion
@@ -316,6 +318,7 @@ func New(logger log.Logger, o *Options) *Handler {
 		h.testReady,
 		h.options.LocalStorage,
 		h.options.TSDBDir,
+		h.options.PushManager,
 		h.options.EnableAdminAPI,
 		logger,
 		FactoryRr,
