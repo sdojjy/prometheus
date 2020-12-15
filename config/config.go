@@ -335,9 +335,9 @@ func (c *GlobalConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if gc.ScrapeInterval == 0 {
 		gc.ScrapeInterval = DefaultGlobalConfig.ScrapeInterval
 	}
-	if gc.ScrapeTimeout > gc.ScrapeInterval {
-		return errors.New("global scrape timeout greater than scrape interval")
-	}
+	//if gc.ScrapeTimeout > gc.ScrapeInterval {
+	//	return errors.New("global scrape timeout greater than scrape interval")
+	//}
 	if gc.ScrapeTimeout == 0 {
 		if DefaultGlobalConfig.ScrapeTimeout > gc.ScrapeInterval {
 			gc.ScrapeTimeout = gc.ScrapeInterval
