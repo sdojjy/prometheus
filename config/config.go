@@ -259,11 +259,12 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		//	return errors.Errorf("scrape timeout greater than scrape interval for scrape config with job name %q", scfg.JobName)
 		//}
 		if scfg.ScrapeTimeout == 0 {
-			if c.GlobalConfig.ScrapeTimeout > scfg.ScrapeInterval {
-				scfg.ScrapeTimeout = scfg.ScrapeInterval
-			} else {
-				scfg.ScrapeTimeout = c.GlobalConfig.ScrapeTimeout
-			}
+			scfg.ScrapeTimeout = c.GlobalConfig.ScrapeTimeout
+			//if c.GlobalConfig.ScrapeTimeout > scfg.ScrapeInterval {
+			//	scfg.ScrapeTimeout = scfg.ScrapeInterval
+			//} else {
+			//	scfg.ScrapeTimeout = c.GlobalConfig.ScrapeTimeout
+			//}
 		}
 
 		if _, ok := jobNames[scfg.JobName]; ok {
