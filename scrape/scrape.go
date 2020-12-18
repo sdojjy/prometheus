@@ -334,6 +334,7 @@ func (sp *scrapePool) reload(cfg *config.ScrapeConfig) error {
 			})
 		)
 		wg.Add(1)
+		level.Info(sp.logger).Log("message", "reload scrape task", "job",  cfg.JobName, "timeout", timeout, "interval", interval)
 
 		go func(oldLoop, newLoop loop) {
 			oldLoop.stop()
@@ -419,7 +420,7 @@ func (sp *scrapePool) sync(targets []*Target) {
 
 			sp.activeTargets[hash] = t
 			sp.loops[hash] = l
-
+			level.Info(sp.logger).Log("message", "sync scrape task", "job",  sp.config.JobName, "timeout", timeout, "interval", interval)
 			go l.run(interval, timeout, nil)
 		} else {
 			// Need to keep the most updated labels information
